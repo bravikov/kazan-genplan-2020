@@ -1,0 +1,322 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <style>
+        .tile {
+            position: absolute;
+        }
+    </style>
+<title>Генплан Казани 2020</title>
+</head>
+<body>
+    <div id="workspace" style="position:fixed;top:0;right:0;bottom:0;left:0;background: #dde8e4;">
+        <div style="background: transparent; position: absolute; pointer-events: none;">
+            <div id="tiles">
+            </div>
+        </div>
+    </div>
+    <script>
+        // Включает и отключает отладочный вывод.
+        isDebug = false;
+
+        if (isDebug) {
+            var debug = console.log.bind(window.console)
+        }
+        else {
+            var debug = function(){}
+        }
+
+        // Размер тайла. Тайл квадратный: 256 x 256 пикселей.
+        const tileSize = 256;
+
+        const tilesConfig = {
+            "levels": [
+                {"tileCountX": 112, "tileCountY": 118},
+                {"tileCountX":  56, "tileCountY":  59},
+                {"tileCountX":  28, "tileCountY":  30},
+                {"tileCountX":  14, "tileCountY":  15},
+                {"tileCountX":   7, "tileCountY":   8},
+                {"tileCountX":   4, "tileCountY":   4},
+                {"tileCountX":   2, "tileCountY":   2},
+            ]
+        };
+
+        const tilesLevelCount = 7;
+
+        let tilesLevel = 3;
+
+        const workspaceContainer = document.getElementById("workspace");
+        const tilesContainer = document.getElementById("tiles");
+
+        class Point {
+            constructor(x, y) {
+                this.x = x;
+                this.y = y;
+            }
+        }
+
+        class Size {
+            constructor(width, height) {
+                this.width = width;
+                this.height = height;
+            }
+        }
+
+        function getTilesCenter() {
+            const tileCount = tilesConfig.levels[tilesLevel];
+            /* После деления на 2 значение получится целым, потому что размер всего изображения выражается в четных числах,
+             * потому что они кратны размеру тайла, который равен четному числу 256. */
+            const x = tileCount.tileCountX * tileSize / 2;
+            const y = tileCount.tileCountY * tileSize / 2;
+            return new Point(x, y);
+        }
+
+        function getWorkspaceSize() {
+            return new Size(workspaceContainer.offsetWidth, workspaceContainer.offsetHeight);
+        }
+
+        function defaultStartTilePosition() {
+            const tilesCenter = getTilesCenter();
+            const workspaceSize = getWorkspaceSize();
+            return new Point(
+                Math.floor((tilesCenter.x - Math.floor(workspaceSize.width / 2)) / tileSize) * tileSize,
+                Math.floor((tilesCenter.y - Math.floor(workspaceSize.height / 2)) / tileSize) * tileSize
+            );
+        }
+
+        /* Координаты начального тайла.
+         * Начальный тайл рисуется в левом верхнем углу тайлового контейнера.
+         * Начальная позиция расчитывается так, чтобы центр изображения был в центре видимой области.
+         * Но позиция кратна числу 256 (размер тайла).
+         * Начальный тайл меняется при перемещении тайлового контейра. */
+
+        let startTilePosition = new Point(0, 0);
+
+        function setStartTilePosition(position) {
+            startTilePosition = position;
+            debug("Start tile position:", startTilePosition.x, startTilePosition.y)
+        }
+
+        function setStartTilePositionByXY(x, y) {
+            setStartTilePosition(new Point(x, y));
+        }
+
+        setStartTilePosition(defaultStartTilePosition());
+
+        // Координаты тайлового контейнера. Меняются при перемещении контейнера.
+        let tilesContainerX = 0;
+        let tilesContainerY = 0;
+
+        // Переменные для перещения тайлового контейнера с помощью мыши.
+        let mouseX = 0;
+        let mouseY = 0;
+        let tilesMoving = false;
+
+        const invalidTileNumber = -1;
+        
+        function placeElement(element, xPos, yPos) {
+            element.style.transform = "translate3d(" + xPos + "px, " + yPos + "px, 0)";
+        }
+        
+        function moveTiles(xPos, yPos) {
+            placeElement(tilesContainer, xPos, yPos);
+        }
+
+        function tileNumber(tilesCountX, tileX, tileY) {
+            return tilesCountX * tileY + tileX;
+        }
+
+        class Tile {
+            element;
+        }
+
+        let tilesMap = new Map();
+
+        function loadTiles() {
+            // Количество тайлов по горизонтали.
+            const tilesCountX = tilesConfig.levels[tilesLevel].tileCountX;
+            // Количество тайлов по вертикали.
+            const tilesCountY = tilesConfig.levels[tilesLevel].tileCountY;
+
+            let startTileX = Math.floor(startTilePosition.x / tileSize);
+            let startTileY = Math.floor(startTilePosition.y / tileSize);
+            
+            const workspaceWidth = workspaceContainer.offsetWidth;
+            const workspaceHeight = workspaceContainer.offsetHeight;
+            
+            // На один тайл больше, чтобы при перемещении карты вправо не было пустого места слева.
+            workspaceTilesCountX = Math.ceil(workspaceWidth / tileSize) + 1;
+            workspaceTilesCountY = Math.ceil(workspaceHeight / tileSize) + 1;
+
+            let tiles = []
+
+            for (let y = 0; y < workspaceTilesCountY; y++) {
+                let xTiles = []
+                const tileY = startTileY + y;
+                if (tileY >= tilesCountY) {
+                    break;
+                }
+                for (let x = 0; x < workspaceTilesCountX; x++) {
+                    const tileX = startTileX + x;
+                    if (tileX >= tilesCountX) {
+                        break;
+                    }
+                    let n = invalidTileNumber;
+                    if (tileX >= 0 && tileY >= 0) {
+                        n = tileNumber(tilesCountX, tileX, tileY);
+                    }
+                    xTiles.push(n);
+                }
+                tiles.push(xTiles);
+            }
+
+            let visibleTilesNumbers = new Set();
+
+            // Отрисовка тайлов.
+            for (let y = 0; y < tiles.length; y++) {
+                for (let x = 0; x < tiles[y].length; x++) {
+                    let tileImg = document.createElement("img");
+                    tileImg.className = "tile";
+                    const tileNumber = tiles[y][x];
+                    if (tileNumber === invalidTileNumber) {
+                        continue;
+                    }
+                    visibleTilesNumbers.add(tileNumber);
+                    if (tilesMap.has(tileNumber)) {
+                        continue;
+                    }
+                    tileImg.src = "tiles3/" + tilesLevel + "/tile-" + tileNumber + ".png";
+
+                    let offsetX = 0;
+                    let offsetY = 0;
+                    if (tilesContainerX !== 0) {
+                        offsetX = tileSize * (Math.floor(tilesContainerX / tileSize) + 1);
+                    }
+                    if (tilesContainerY !== 0) {
+                        offsetY = tileSize * (Math.floor(tilesContainerY / tileSize) + 1);
+                    }
+
+                    const elementPositionX = x * tileSize - offsetX;
+                    const elementPositionY = y * tileSize - offsetY;
+                    placeElement(tileImg, elementPositionX, elementPositionY);
+                    tilesContainer.appendChild(tileImg);
+                    let tile = new Tile();
+                    tile.element = tileImg;
+                    tilesMap.set(tileNumber, tile);
+                }
+            }
+
+            // Удаление тайлов, которых не видно.
+            tilesMap.forEach((value, key, map) => {
+                if (visibleTilesNumbers.has(key)) {
+                    return;
+                }
+                else {
+                    value.element.remove();
+                    map.delete(key);
+                }
+            });
+        }
+
+        moveTiles(tilesContainerX, tilesContainerY);
+        loadTiles();
+        
+        workspaceContainer.addEventListener('mousedown', e => {
+            mouseX = e.offsetX;
+            mouseY = e.offsetY;
+            tilesMoving = true;
+            workspaceContainer.style.cursor = "grabbing";
+        });
+        
+        workspaceContainer.addEventListener('mouseup', e => {
+            if (tilesMoving === true) {
+                mouseX = 0;
+                mouseY = 0;
+                tilesMoving = false;
+                workspaceContainer.style.cursor = "default";
+                loadTiles();
+            }
+        });
+        
+        function solveNewPosition(oldElemetPosition, mouseOldPosition, mouseNewPosition) {
+            let mouseOffset = mouseNewPosition - mouseOldPosition;
+            return oldElemetPosition + mouseOffset;
+        }
+        
+        workspaceContainer.addEventListener('mousemove', e => {
+            if (tilesMoving === true) {
+                const newTilesContainerX = solveNewPosition(tilesContainerX, mouseX, e.offsetX);
+                const newTilesContainerY = solveNewPosition(tilesContainerY, mouseY, e.offsetY);
+                mouseX = e.offsetX;
+                mouseY = e.offsetY;
+
+
+                setStartTilePositionByXY(
+                    startTilePosition.x + tilesContainerX - newTilesContainerX,
+                    startTilePosition.y + tilesContainerY - newTilesContainerY
+                );
+
+                tilesContainerX = newTilesContainerX;
+                tilesContainerY = newTilesContainerY;
+
+                moveTiles(newTilesContainerX, newTilesContainerY);
+            }
+        });
+
+        let mousePositionX = 0;
+        let mousePositionY = 0;
+        document.addEventListener('mousemove', event => {
+            mousePositionX = event.clientX;
+            mousePositionY = event.clientY;
+        });
+
+        workspaceContainer.addEventListener("wheel", event => {
+            const zoomIn = Math.sign(event.deltaY) == -1;
+            let scale = 0;
+            if (zoomIn) {
+                debug("Zoom in.");
+                if (tilesLevel > 0) {
+                    tilesLevel -= 1;
+                    scale = 2;
+                }
+                else {
+                    return;
+                }
+            }
+            else {
+                debug("Zoom out.");
+                if (tilesLevel < tilesLevelCount - 1) {
+                    tilesLevel += 1;
+                    scale = 0.5;
+                }
+                else {
+                    return;
+                }
+            }
+            const workspaceSize = getWorkspaceSize();
+
+            const center = new Point(
+                Math.floor((startTilePosition.x + mousePositionX) * scale),
+                Math.floor((startTilePosition.y + mousePositionY) * scale)
+            );
+
+            let precisionStartTilePosition = center;
+            precisionStartTilePosition.x -= mousePositionX;
+            precisionStartTilePosition.y -= mousePositionY;
+
+            tilesContainerX = -(precisionStartTilePosition.x % tileSize);
+            tilesContainerY = -(precisionStartTilePosition.y % tileSize);
+
+            // Удаление всех тайлов.
+            tilesMap.forEach((value, key, map) => {
+                value.element.remove();
+                map.delete(key);
+            });
+
+            setStartTilePosition(precisionStartTilePosition);
+            moveTiles(tilesContainerX, tilesContainerY);
+            loadTiles();
+        });
+    </script>
+</body>
+</html>
