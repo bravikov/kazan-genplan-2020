@@ -209,12 +209,14 @@ workspaceContainer.ondragstart = function() {
 
 workspaceContainer.addEventListener('pointerdown', e => {
     debug("pointerdown");
+    e.preventDefault();
     tilesMoving = true;
     workspaceContainer.style.cursor = "grabbing";
 });
 
 workspaceContainer.addEventListener('pointerup', e => {
     debug("pointerup");
+    e.preventDefault();
     if (tilesMoving === true) {
         tilesMoving = false;
         workspaceContainer.style.cursor = "default";
@@ -224,10 +226,12 @@ workspaceContainer.addEventListener('pointerup', e => {
 
 workspaceContainer.addEventListener('pointercancel', e => {
     debug("pointercancel");
+    e.preventDefault();
 });
 
 workspaceContainer.addEventListener('pointermove', e => {
     debug("pointermove");
+    e.preventDefault();
     if (tilesMoving === true) {
         const newTilesContainerX = tilesContainerX + e.movementX;
         const newTilesContainerY = tilesContainerY + e.movementY;
@@ -252,6 +256,8 @@ document.addEventListener('pointermove', event => {
 });
 
 workspaceContainer.addEventListener("wheel", event => {
+    debug("wheel");
+    event.preventDefault();
     const zoomIn = Math.sign(event.deltaY) == -1;
     let scale = 0;
     if (zoomIn) {
@@ -303,6 +309,5 @@ workspaceContainer.addEventListener("wheel", event => {
 
 window.onload = function() {
     document.getElementsByTagName("body")[0].appendChild(workspaceContainer);
-    document.getElementsByTagName("title")[0].innerHTML = "test";
     main();
 };
