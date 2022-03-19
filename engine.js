@@ -202,12 +202,19 @@ function loadTiles() {
 moveTiles(tilesContainerX, tilesContainerY);
 loadTiles();
 
+// Предотвращает перехват инициативы браузером при перемещении карты.
+workspaceContainer.ondragstart = function() {
+    return false;
+};
+
 workspaceContainer.addEventListener('pointerdown', e => {
+    debug("pointerdown");
     tilesMoving = true;
     workspaceContainer.style.cursor = "grabbing";
 });
 
 workspaceContainer.addEventListener('pointerup', e => {
+    debug("pointerup");
     if (tilesMoving === true) {
         tilesMoving = false;
         workspaceContainer.style.cursor = "default";
@@ -215,7 +222,12 @@ workspaceContainer.addEventListener('pointerup', e => {
     }
 });
 
+workspaceContainer.addEventListener('pointercancel', e => {
+    debug("pointercancel");
+});
+
 workspaceContainer.addEventListener('pointermove', e => {
+    debug("pointermove");
     if (tilesMoving === true) {
         const newTilesContainerX = tilesContainerX + e.movementX;
         const newTilesContainerY = tilesContainerY + e.movementY;
