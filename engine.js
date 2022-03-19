@@ -12,7 +12,7 @@ pretilesContainer.appendChild(tilesContainer);
 function main() {
 
 // Включает и отключает отладочный вывод.
-const isDebug = false;
+const isDebug = true;
 
 if (isDebug) {
     var debug = console.log.bind(window.console)
@@ -108,7 +108,9 @@ function tileNumber(tilesCountX, tileX, tileY) {
 }
 
 class Tile {
-    element;
+    constructor(element) {
+        this.element = element;
+    }
 }
 
 let tilesMap = new Map();
@@ -181,8 +183,7 @@ function loadTiles() {
             const elementPositionY = y * tileSize - offsetY;
             placeElement(tileImg, elementPositionX, elementPositionY);
             tilesContainer.appendChild(tileImg);
-            let tile = new Tile();
-            tile.element = tileImg;
+            let tile = new Tile(tileImg);
             tilesMap.set(tileNumber, tile);
         }
     }
@@ -257,6 +258,7 @@ document.addEventListener('pointermove', event => {
 
 workspaceContainer.addEventListener("wheel", event => {
     debug("wheel");
+    debug(event.deltaX, event.deltaY, event.deltaZ, event.deltaMode, event.wheelDelta, event.wheelDeltaX, event.wheelDeltaY);
     event.preventDefault();
     const zoomIn = Math.sign(event.deltaY) == -1;
     let scale = 0;
