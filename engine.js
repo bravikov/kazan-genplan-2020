@@ -256,9 +256,20 @@ document.addEventListener('pointermove', event => {
     mousePositionY = event.clientY;
 });
 
+let wheel_is_slepping = false;
+
 workspaceContainer.addEventListener("wheel", event => {
     debug("wheel");
     debug(event.deltaX, event.deltaY, event.deltaZ, event.deltaMode, event.wheelDelta, event.wheelDeltaX, event.wheelDeltaY);
+    if (wheel_is_slepping) {
+        return;
+    }
+
+    wheel_is_slepping = true;
+    setTimeout(function wakeup_wheel() {
+        wheel_is_slepping = false;
+    }, 100);
+
     event.preventDefault();
     const zoomIn = Math.sign(event.deltaY) == -1;
     let scale = 0;
