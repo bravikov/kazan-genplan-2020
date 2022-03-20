@@ -268,7 +268,7 @@ workspaceContainer.addEventListener("wheel", event => {
     wheel_is_slepping = true;
     setTimeout(function wakeup_wheel() {
         wheel_is_slepping = false;
-    }, 100);
+    }, 200);
 
     event.preventDefault();
     const zoomIn = Math.sign(event.deltaY) == -1;
