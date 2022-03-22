@@ -73,6 +73,17 @@ function setStartTilePositionByXY(x, y) {
 let tilesContainerX = 0;
 let tilesContainerY = 0;
 
+// Координаты фокуса.
+// Фокус — точка, относительно которой происходит масштабирование.
+// Для мышки, фокус — это позиция курсора.
+// Для тачпада, фокус — это центральная позиция между пальцами.
+let focusPosition = new Point(0, 0)
+
+function setFocusPosition(x , y) {
+    focusPosition = new Point(x, y);
+    debug("Focus position:", focusPosition.x, focusPosition.y)
+}
+
 function placeElement(element, xPos, yPos) {
     element.style.transform = "translate3d(" + xPos + "px, " + yPos + "px, 0)";
 }
@@ -92,14 +103,13 @@ function setDefaultStartTilePosition() {
     tilesContainerX = -(precisionStartTilePosition.x % tileSize);
     tilesContainerY = -(precisionStartTilePosition.y % tileSize);
 
+    setFocusPosition(tilesCenter.x, tilesCenter.y);
+
     setStartTilePosition(precisionStartTilePosition);
     moveTiles(tilesContainerX, tilesContainerY);
 }
 
 setDefaultStartTilePosition();
-
-// Флаг показывает, что тайловый контейнера неходится в режиме перемещения.
-let tilesMoving = false;
 
 const invalidTileNumber = -1;
 
@@ -208,70 +218,66 @@ workspaceContainer.ondragstart = function() {
     return false;
 };
 
-workspaceContainer.addEventListener('pointerdown', e => {
+let primaryPointerId = NaN;
+let secondaryPointerId = NaN;
+let pointerCount = 0;
+
+class Pointer {
+    constructor(position) {
+        this.position = position;
+    }
+}
+
+// Словарь содержит все указывающие объекты экрана, активные в данный момент.
+// Ключ: pointer ID, значение: Pointer
+let activePointersMap = new Map();
+
+function debugPointers() {
+    debug("Pointers: [")
+    activePointersMap.forEach((value, key, map) => {
+        debug(`  Pointer ${key} [${value.x}, ${value.y}]`)
+    });
+    debug("]")
+}
+
+function addPointers(event) {
+    const pointerId = event.pointerId;
+    debug(`Pointer ${pointerId}`)
+    activePointersMap.set(event.pointerId, new Point(event.offsetX, event.offsetY))
+    debugPointers();
+}
+
+function delPointers(event) {
+    const pointerId = event.pointerId;
+    debug(`Pointer ${pointerId}`)
+    if (activePointersMap.has(pointerId)) {
+        activePointersMap.delete(pointerId);
+    }
+    debugPointers();
+}
+
+workspaceContainer.addEventListener('pointerdown', event => {
     debug("pointerdown");
-    e.preventDefault();
-    tilesMoving = true;
-    workspaceContainer.style.cursor = "grabbing";
-});
-
-workspaceContainer.addEventListener('pointerup', e => {
-    debug("pointerup");
-    e.preventDefault();
-    if (tilesMoving === true) {
-        tilesMoving = false;
-        workspaceContainer.style.cursor = "default";
-        loadTiles();
-    }
-});
-
-workspaceContainer.addEventListener('pointercancel', e => {
-    debug("pointercancel");
-    e.preventDefault();
-});
-
-workspaceContainer.addEventListener('pointermove', e => {
-    debug("pointermove");
-    e.preventDefault();
-    if (tilesMoving === true) {
-        const newTilesContainerX = tilesContainerX + e.movementX;
-        const newTilesContainerY = tilesContainerY + e.movementY;
-
-        setStartTilePositionByXY(
-            startTilePosition.x + tilesContainerX - newTilesContainerX,
-            startTilePosition.y + tilesContainerY - newTilesContainerY
-        );
-
-        tilesContainerX = newTilesContainerX;
-        tilesContainerY = newTilesContainerY;
-
-        moveTiles(newTilesContainerX, newTilesContainerY);
-    }
-});
-
-let mousePositionX = 0;
-let mousePositionY = 0;
-document.addEventListener('pointermove', event => {
-    mousePositionX = event.clientX;
-    mousePositionY = event.clientY;
-});
-
-let wheel_is_slepping = false;
-
-workspaceContainer.addEventListener("wheel", event => {
-    debug("wheel");
-    debug(event.deltaX, event.deltaY, event.deltaZ, event.deltaMode, event.wheelDelta, event.wheelDeltaX, event.wheelDeltaY);
-    if (wheel_is_slepping) {
-        return;
-    }
-
-    wheel_is_slepping = true;
-    setTimeout(function wakeup_wheel() {
-        wheel_is_slepping = false;
-    }, 200);
-
     event.preventDefault();
-    const zoomIn = Math.sign(event.deltaY) == -1;
+    workspaceContainer.style.cursor = "grabbing";
+    addPointers(event);
+});
+
+workspaceContainer.addEventListener('pointerup', event => {
+    debug("pointerup");
+    event.preventDefault();
+    workspaceContainer.style.cursor = "default";
+    loadTiles();
+    delPointers(event);
+});
+
+workspaceContainer.addEventListener('pointercancel', event => {
+    debug("pointercancel");
+    event.preventDefault();
+    delPointers(event);
+});
+
+function zoom(zoomIn) {
     let scale = 0;
     if (zoomIn) {
         debug("Zoom in.");
@@ -296,8 +302,8 @@ workspaceContainer.addEventListener("wheel", event => {
     const workspaceSize = getWorkspaceSize();
 
     const center = new Point(
-        Math.floor((startTilePosition.x + mousePositionX) * scale),
-        Math.floor((startTilePosition.y + mousePositionY) * scale)
+        Math.floor((startTilePosition.x + focusPosition.x) * scale),
+        Math.floor((startTilePosition.y + focusPosition.y) * scale)
     );
 
     // Удаление всех тайлов.
@@ -307,8 +313,8 @@ workspaceContainer.addEventListener("wheel", event => {
     });
 
     let precisionStartTilePosition = center;
-    precisionStartTilePosition.x -= mousePositionX;
-    precisionStartTilePosition.y -= mousePositionY;
+    precisionStartTilePosition.x -= focusPosition.x;
+    precisionStartTilePosition.y -= focusPosition.y;
 
     tilesContainerX = -(precisionStartTilePosition.x % tileSize);
     tilesContainerY = -(precisionStartTilePosition.y % tileSize);
@@ -316,6 +322,106 @@ workspaceContainer.addEventListener("wheel", event => {
     setStartTilePosition(precisionStartTilePosition);
     moveTiles(tilesContainerX, tilesContainerY);
     loadTiles();
+}
+
+// Количество пикселей, на которые изменился масштабирующий прямоугольник.
+// Изменяется при масштабировании с помощью пальцев.
+let pointersScale_px = 0;
+
+// Порог при котором изменяется уровень тайлов и сбрасывается pointersScale_px.
+const pointersScaleThreshold_px = 15;
+
+workspaceContainer.addEventListener('pointermove', event => {
+    debug("pointermove");
+    event.preventDefault();
+    const pointerId = event.pointerId;
+    debug(`Pointer ${pointerId}`)
+
+    if (activePointersMap.size < 2) {
+        setFocusPosition(event.offsetX, event.offsetY)
+    }
+
+    if (activePointersMap.size > 2) {
+        // Ничего не делаем, если на экране много указателей.
+        return;
+    }
+
+    if (activePointersMap.size < 2) {
+        pointersScale_px = 0;
+    }
+
+    if (!activePointersMap.has(pointerId)) {
+        return;
+    }
+
+    let currentPointer = activePointersMap.get(pointerId);
+
+    debug("Current pointer position: ", currentPointer.x, currentPointer.y)
+
+    const pointerDeltaX = event.offsetX - currentPointer.x;
+    const pointerDeltaY = event.offsetY - currentPointer.y;
+
+    // Один указатель на экране. Мышь или палец.
+    // Двигаем карту.
+    if (activePointersMap.size === 1) {
+        debug("Перемещение тайлов.");
+
+        const newTilesContainerX = tilesContainerX + pointerDeltaX;
+        const newTilesContainerY = tilesContainerY + pointerDeltaY;
+
+        setStartTilePositionByXY(
+            startTilePosition.x + tilesContainerX - newTilesContainerX,
+            startTilePosition.y + tilesContainerY - newTilesContainerY
+        );
+
+        tilesContainerX = newTilesContainerX;
+        tilesContainerY = newTilesContainerY;
+
+        moveTiles(newTilesContainerX, newTilesContainerY);
+    }
+
+    // Два указателя на экране. Два пальца.
+    // Масштабиуем.
+    if (activePointersMap.size === 2 && event.isPrimary) {
+        debug("Масштабирование пальцами.");
+        pointersScale_px -= pointerDeltaY;
+        debug("pointersScale_px:", pointersScale_px);
+        debug("pointerDeltaY:", pointerDeltaY);
+
+        if (Math.abs(pointersScale_px) >= pointersScaleThreshold_px) {
+            const zoomIn = Math.sign(pointersScale_px) == 1;
+            if (zoomIn) {
+                console.log("Zoom In");
+            }
+            else {
+                console.log("Zoom Out");
+            }
+            zoom(zoomIn);
+            pointersScale_px = 0;
+        }
+    }
+
+    currentPointer.x = event.offsetX;
+    currentPointer.y = event.offsetY;
+});
+
+let wheel_is_slepping = false;
+
+workspaceContainer.addEventListener("wheel", event => {
+    debug("wheel");
+    debug(event.deltaX, event.deltaY, event.deltaZ, event.deltaMode, event.wheelDelta, event.wheelDeltaX, event.wheelDeltaY);
+    if (wheel_is_slepping) {
+        return;
+    }
+
+    wheel_is_slepping = true;
+    setTimeout(function wakeup_wheel() {
+        wheel_is_slepping = false;
+    }, 200);
+
+    event.preventDefault();
+    const zoomIn = Math.sign(event.deltaY) == -1;
+    zoom(zoomIn);
 });
 
 } // function main()
